@@ -96,8 +96,8 @@ function PlayContent() {
     );
   }
 
-  // Show multiplayer active game
-  if (matchStatus === 'playing' && GameComponent) {
+  // Show multiplayer active game (keep mounted during 'ended' so modal can show)
+  if ((matchStatus === 'playing' || matchStatus === 'ended') && GameComponent) {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />

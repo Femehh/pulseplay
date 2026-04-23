@@ -99,11 +99,11 @@ async function endMatch(io, state, match, winnerId, prisma) {
     eloChanges: {},
   };
 
-  // Calculate ELO changes
+  // Calculate ELO changes — keyed by username so the frontend can look them up
   if (winner && loser && !winner.playerId?.startsWith('guest_') && !loser.playerId?.startsWith('guest_')) {
     const { winnerChange, loserChange } = calculateEloChange(winner.elo, loser.elo);
-    result.eloChanges[winner.playerId] = winnerChange;
-    result.eloChanges[loser.playerId] = loserChange;
+    result.eloChanges[winner.username] = winnerChange;
+    result.eloChanges[loser.username] = loserChange;
 
     // Update DB
     if (prisma) {
