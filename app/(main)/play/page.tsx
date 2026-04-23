@@ -20,6 +20,7 @@ const GameComponents: Record<string, React.ComponentType<any>> = {
   SOUND_RECOGNITION: dynamic(() => import('@/app/components/games/SoundRecognitionGame')),
   AIM_TRAINER: dynamic(() => import('@/app/components/games/AimTrainerGame')),
   MEMORY_TILES: dynamic(() => import('@/app/components/games/MemoryTilesGame')),
+  CHECKERS: dynamic(() => import('@/app/components/games/CheckersGame')),
 };
 
 function PlayContent() {
@@ -132,7 +133,7 @@ function PlayContent() {
         </motion.div>
 
         {/* Game selector */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           {Object.entries(GAME_CONFIG).map(([key, game]) => (
             <motion.button
               key={key}

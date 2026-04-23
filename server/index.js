@@ -53,6 +53,7 @@ const state = {
     SOUND_RECOGNITION: [],
     AIM_TRAINER: [],
     MEMORY_TILES: [],
+    CHECKERS: [],
   },
   activeMatches: new Map(),     // matchId -> match state
   playerToMatch: new Map(),     // socketId -> matchId

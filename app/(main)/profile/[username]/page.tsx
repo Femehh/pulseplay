@@ -207,7 +207,7 @@ export default function ProfilePage() {
               <BarChart3 size={16} />
               <span className="text-sm font-medium">Per-Game Rankings</span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {profile.rankings.map((r) => {
                 const game = GAME_CONFIG[r.gameType as keyof typeof GAME_CONFIG];
                 return (

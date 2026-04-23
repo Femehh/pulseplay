@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type GameType = 'REACTION_TIME' | 'COLOR_MATCH' | 'SOUND_RECOGNITION' | 'AIM_TRAINER' | 'MEMORY_TILES';
+export type GameType = 'REACTION_TIME' | 'COLOR_MATCH' | 'SOUND_RECOGNITION' | 'AIM_TRAINER' | 'MEMORY_TILES' | 'CHECKERS';
 export type MatchStatus = 'idle' | 'queuing' | 'found' | 'countdown' | 'playing' | 'ended';
 
 export interface PlayerInfo {

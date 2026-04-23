@@ -63,4 +63,11 @@ export const GAME_CONFIG = {
     color: '#22c55e',
     gradient: 'from-green-500 to-teal-500',
   },
+  CHECKERS: {
+    name: 'Checkers',
+    description: 'Classic checkers — capture all your opponent\'s pieces to win',
+    icon: '♟',
+    color: '#f97316',
+    gradient: 'from-orange-500 to-amber-500',
+  },
 } as const;

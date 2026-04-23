@@ -47,6 +47,7 @@ model UserStats {
   soundRecogWins  Int     @default(0)
   aimTrainerWins  Int     @default(0)
   memoryTilesWins Int     @default(0)
+  checkersWins    Int     @default(0)
 
   updatedAt       DateTime @updatedAt
 }
@@ -118,6 +119,7 @@ enum GameType {
   SOUND_RECOGNITION
   AIM_TRAINER
   MEMORY_TILES
+  CHECKERS
 }
 
 enum MatchStatus {
