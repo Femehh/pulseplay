@@ -67,22 +67,29 @@ export default function MemoryTilesGame({ match, emit, on, solo = false, onExit 
   useEffect(() => {
     if (solo) return;
     const offState = on('game:state', (data: any) => {
-      setTiles(data.board.map((t: any) => ({ ...t, value: undefined })));
+      // Board arrives hidden — no values yet
+      setTiles(data.board.map((t: any) => ({ id: t.id, flipped: false, matched: false })));
+      if (data.scores) setScores(data.scores);
     });
     const offFlip = on('game:tile_flip', (data: any) => {
-      setTiles((prev) => prev.map((t) => t.id === data.tileId ? { ...t, flipped: true, value: data.value } : t));
+      setTiles((prev) => prev.map((t) =>
+        t.id === data.tileId ? { ...t, flipped: true, value: data.value } : t
+      ));
     });
     const offMatch = on('game:match_found', (data: any) => {
       const byMe = data.matchedBy.username === user?.username;
-      setTiles((prev) => prev.map((t) => data.tileIds.includes(t.id) ? { ...t, matched: true, matchedByMe: byMe } : t));
+      setTiles((prev) => prev.map((t) =>
+        data.tileIds.includes(t.id) ? { ...t, matched: true, matchedByMe: byMe } : t
+      ));
       setLastMatch({ value: data.value, byMe });
       if (data.scores) setScores(data.scores);
       setTimeout(() => setLastMatch(null), 1500);
     });
     const offNoMatch = on('game:no_match', (data: any) => {
-      setTimeout(() => {
-        setTiles((prev) => prev.map((t) => data.tileIds.includes(t.id) ? { ...t, flipped: false, value: undefined } : t));
-      }, 100);
+      // Server already waited 900ms before emitting — unflip immediately on client
+      setTiles((prev) => prev.map((t) =>
+        data.tileIds.includes(t.id) ? { ...t, flipped: false, value: undefined } : t
+      ));
     });
     const offEnded = on('match:ended', (data: any) => setResult(data));
     return () => { offState(); offFlip(); offMatch(); offNoMatch(); offEnded(); };
@@ -143,9 +150,8 @@ export default function MemoryTilesGame({ match, emit, on, solo = false, onExit 
   const opScore = scores.find((s) => s.username !== user?.username)?.score ?? 0;
   const opUsername = scores.find((s) => s.username !== user?.username)?.username ?? 'Opponent';
   const totalPairs = 8;
-  const matchedPairs = solo
-    ? tiles.filter((t) => t.matched).length / 2
-    : tiles.filter((t) => t.matched && t.id % 2 === 0).length;
+  // Count unique matched pairs (each pair has 2 tiles, so divide by 2)
+  const matchedPairs = tiles.filter((t) => t.matched).length / 2;
 
   if (solo && soloFinished) {
     return (
