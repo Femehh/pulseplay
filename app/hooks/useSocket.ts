@@ -62,6 +62,15 @@ export function useSocket() {
     sock.on('match:ended', (result) => {
       setResult(result);
       setMatchStatus('ended');
+
+      // Update local user ELO so navbar reflects new rating immediately
+      const { user: currentUser, token: currentToken, setUser } = useAuthStore.getState();
+      if (currentUser && !currentUser.isGuest && result.eloChanges?.[currentUser.username] !== undefined) {
+        setUser(
+          { ...currentUser, elo: currentUser.elo + result.eloChanges[currentUser.username] },
+          currentToken!
+        );
+      }
     });
 
     // Score updates from various games

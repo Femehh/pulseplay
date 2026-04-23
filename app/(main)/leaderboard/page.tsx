@@ -52,6 +52,13 @@ export default function LeaderboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Refetch when tab becomes visible (e.g. returning from a match)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchData(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [fetchData]);
+
   // Reset page on filter/search change
   useEffect(() => { setPage(0); }, [filter, search]);
 
