@@ -1,0 +1,61 @@
+version: '3.9'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pulseplay
+      POSTGRES_PASSWORD: pulseplay_secret
+      POSTGRES_DB: pulseplay
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pulseplay']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Next.js frontend (port 3000)
+  web:
+    build:
+      context: .
+      target: builder
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://pulseplay:pulseplay_secret@postgres:5432/pulseplay
+      JWT_SECRET: change-me-in-production-please
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && npm run dev:next"
+
+  # Socket.io game server (port 3001)
+  gameserver:
+    build:
+      context: .
+      target: builder
+    restart: unless-stopped
+    ports:
+      - '3001:3001'
+    environment:
+      DATABASE_URL: postgresql://pulseplay:pulseplay_secret@postgres:5432/pulseplay
+      JWT_SECRET: change-me-in-production-please
+      PORT: 3001
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: node server/index.js
+
+volumes:
+  postgres_data:

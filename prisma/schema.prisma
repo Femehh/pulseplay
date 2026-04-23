@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  email         String?  @unique
+  passwordHash  String?
+  isGuest       Boolean  @default(false)
+  avatarUrl     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Stats
+  stats         UserStats?
+
+  // Matches
+  matchesAsP1   Match[]  @relation("Player1")
+  matchesAsP2   Match[]  @relation("Player2")
+  wins          Match[]  @relation("Winner")
+
+  // Leaderboard
+  rankings      Ranking[]
+}
+
+model UserStats {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  totalMatches    Int     @default(0)
+  wins            Int     @default(0)
+  losses          Int     @default(0)
+  elo             Int     @default(1000)
+  peakElo         Int     @default(1000)
+
+  // Per-game stats
+  avgReactionTime Float?  // ms
+  reactionWins    Int     @default(0)
+  colorMatchWins  Int     @default(0)
+  soundRecogWins  Int     @default(0)
+  aimTrainerWins  Int     @default(0)
+  memoryTilesWins Int     @default(0)
+
+  updatedAt       DateTime @updatedAt
+}
+
+model Match {
+  id          String      @id @default(cuid())
+  gameType    GameType
+  status      MatchStatus @default(PENDING)
+  mode        MatchMode   @default(ONE_VS_ONE)
+
+  player1Id   String
+  player2Id   String?
+  winnerId    String?
+
+  player1     User        @relation("Player1", fields: [player1Id], references: [id])
+  player2     User?       @relation("Player2", fields: [player2Id], references: [id])
+  winner      User?       @relation("Winner", fields: [winnerId], references: [id])
+
+  // Scores
+  player1Score Int        @default(0)
+  player2Score Int        @default(0)
+
+  // ELO changes
+  player1EloChange Int?
+  player2EloChange Int?
+
+  // Timing
+  startedAt   DateTime?
+  endedAt     DateTime?
+  duration    Int?        // seconds
+
+  // Game data (JSON)
+  gameData    Json?
+
+  createdAt   DateTime    @default(now())
+}
+
+model Ranking {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameType  GameType
+  elo       Int      @default(1000)
+  rank      Int?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, gameType])
+  @@index([elo(sort: Desc)])
+}
+
+model Lobby {
+  id          String      @id @default(cuid())
+  code        String      @unique @default(cuid())
+  gameType    GameType
+  mode        MatchMode   @default(ONE_VS_ONE)
+  status      LobbyStatus @default(WAITING)
+  isPrivate   Boolean     @default(false)
+  maxPlayers  Int         @default(2)
+  hostId      String
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum GameType {
+  REACTION_TIME
+  COLOR_MATCH
+  SOUND_RECOGNITION
+  AIM_TRAINER
+  MEMORY_TILES
+}
+
+enum MatchStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum MatchMode {
+  ONE_VS_ONE
+  TWO_VS_TWO
+  PUBLIC
+}
+
+enum LobbyStatus {
+  WAITING
+  STARTING
+  IN_GAME
+  FINISHED
+}
