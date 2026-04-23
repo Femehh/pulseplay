@@ -79,30 +79,37 @@ io.on('connection', (socket) => {
   socket.on('disconnect', (reason) => {
     console.log(`[DISCONNECT] ${player.username} - ${reason}`);
 
-    // Handle disconnect mid-match
+    // Handle disconnect mid-match — give 30s grace period for reconnect
     const matchId = state.playerToMatch.get(socket.id);
     if (matchId) {
       const match = state.activeMatches.get(matchId);
       if (match && match.status === 'playing') {
-        // Opponent wins by forfeit
         const opponentSocketId = match.players.find((p) => p.socketId !== socket.id)?.socketId;
         if (opponentSocketId) {
-          io.to(opponentSocketId).emit('opponent:disconnected', { reason: 'disconnect' });
+          io.to(opponentSocketId).emit('opponent:disconnected', { reason: 'disconnect', username: player.username });
         }
-        match.status = 'abandoned';
-        state.activeMatches.delete(matchId);
+
+        // Grace period: wait 30s before forfeiting
+        match._disconnectTimer = setTimeout(() => {
+          const stillActive = state.activeMatches.get(matchId);
+          if (!stillActive || stillActive.status !== 'playing') return;
+          // Player didn't reconnect — opponent wins
+          const { endMatch } = require('./sockets/gameHandler');
+          const winner = match.players.find((p) => p.socketId !== socket.id);
+          endMatch(io, state, match, winner?.socketId || null, prisma);
+        }, 30000);
       }
     }
 
-    // Remove from matchmaking queues
+    // Remove from matchmaking queues immediately
     for (const gameType of Object.keys(state.matchmakingQueues)) {
       state.matchmakingQueues[gameType] = state.matchmakingQueues[gameType].filter(
         (p) => p.socketId !== socket.id
       );
     }
 
-    state.playerToMatch.delete(socket.id);
     state.connectedPlayers.delete(socket.id);
+    // Don't delete playerToMatch — needed for rejoin
   });
 });
 

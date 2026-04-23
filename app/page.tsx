@@ -10,7 +10,7 @@ const FEATURES = [
   { icon: '⚡', title: 'Ultra-Low Latency', desc: 'Sub-50ms WebSocket gameplay. Every millisecond matters.' },
   { icon: '🛡️', title: 'Anti-Cheat', desc: 'Server-authoritative logic. No client-trusted scores.' },
   { icon: '🏆', title: 'ELO Rankings', desc: 'Competitive matchmaking. Climb from Bronze to Grandmaster.' },
-  { icon: '🎮', title: '5 Minigames', desc: 'Reaction, Color Match, Sound, Aim Trainer & Memory Tiles.' },
+  { icon: '🎮', title: '6 Minigames', desc: 'Reaction, Color Match, Sound, Aim Trainer, Memory Tiles & Checkers.' },
 ];
 
 const STATS = [
@@ -39,7 +39,7 @@ export default function HomePage() {
           >
             <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-sm font-medium mb-6">
               <Zap size={14} />
-              Real-time multiplayer · 5 competitive games
+              Real-time multiplayer · 6 competitive games
             </span>
           </motion.div>
 
@@ -106,7 +106,7 @@ export default function HomePage() {
             viewport={{ once: true }}
           >
             <h2 className="text-3xl md:text-4xl font-black mb-3">
-              5 Competitive{' '}
+              6 Competitive{' '}
               <span className="text-gradient">Minigames</span>
             </h2>
             <p className="text-text-muted">Each game tests a different skill. Master them all.</p>

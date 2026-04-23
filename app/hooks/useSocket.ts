@@ -8,6 +8,7 @@ import { useGameStore } from '@/app/store/gameStore';
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const { token, user } = useAuthStore();
   const {
     setConnected,
@@ -16,6 +17,8 @@ export function useSocket() {
     setCountdown,
     setResult,
     updateScore,
+    match,
+    matchStatus,
   } = useGameStore();
 
   useEffect(() => {
@@ -28,12 +31,17 @@ export function useSocket() {
 
     sock.on('connect', () => {
       setConnected(true);
-      console.log('[Socket] Connected:', sock.id);
+
+      // Rejoin active match room after reconnect
+      const currentMatch = useGameStore.getState().match;
+      const currentStatus = useGameStore.getState().matchStatus;
+      if (currentMatch && (currentStatus === 'playing' || currentStatus === 'ended')) {
+        sock.emit('match:rejoin', { matchId: currentMatch.matchId });
+      }
     });
 
     sock.on('disconnect', (reason) => {
       setConnected(false);
-      console.log('[Socket] Disconnected:', reason);
     });
 
     sock.on('match:found', (data) => {
@@ -81,6 +89,19 @@ export function useSocket() {
       }
     });
 
+    // Keep-alive heartbeat every 20s to prevent idle disconnection
+    heartbeatRef.current = setInterval(() => {
+      if (sock.connected) sock.emit('ping');
+    }, 20000);
+
+    // Tab visibility — reconnect immediately when tab becomes visible again
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && !sock.connected) {
+        sock.connect();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       sock.off('connect');
       sock.off('disconnect');
@@ -91,6 +112,8 @@ export function useSocket() {
       sock.off('game:round_end');
       sock.off('game:hit');
       sock.off('game:match_found');
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
   }, [token, user]);
 

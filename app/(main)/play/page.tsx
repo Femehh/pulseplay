@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Lock, Globe, X, Bot } from 'lucide-react';
+import { Users, Lock, Globe, X, Bot, Clock } from 'lucide-react';
 import Navbar from '@/app/components/layout/Navbar';
 import Button from '@/app/components/ui/Button';
 import { GAME_CONFIG } from '@/app/lib/ranks';
@@ -11,6 +11,7 @@ import { useSocket } from '@/app/hooks/useSocket';
 import { useGameStore, type GameType } from '@/app/store/gameStore';
 import { useAuthStore } from '@/app/store/authStore';
 import CountdownOverlay from '@/app/components/ui/CountdownOverlay';
+import { useToast } from '@/app/components/ui/Toast';
 import dynamic from 'next/dynamic';
 
 // Dynamically import game components
@@ -37,6 +38,11 @@ function PlayContent() {
   const [privateCode, setPrivateCode] = useState('');
   const [tab, setTab] = useState<'quick' | 'private' | 'solo'>('quick');
   const [soloActive, setSoloActive] = useState(false);
+  const [queueSize, setQueueSize] = useState(0);
+  const [matchDuration, setMatchDuration] = useState(0);
+  const [opponentDisconnected, setOpponentDisconnected] = useState(false);
+  const matchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
 
   // Handle match found → navigate
   useEffect(() => {
@@ -45,16 +51,47 @@ function PlayContent() {
     }
   }, [matchStatus]);
 
+  // Match duration timer
+  useEffect(() => {
+    if (matchStatus === 'playing') {
+      setMatchDuration(0);
+      matchTimerRef.current = setInterval(() => setMatchDuration(d => d + 1), 1000);
+    } else {
+      if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+    }
+    return () => { if (matchTimerRef.current) clearInterval(matchTimerRef.current); };
+  }, [matchStatus]);
+
+  // Poll queue size while queuing
+  useEffect(() => {
+    if (matchStatus !== 'queuing') return;
+    const interval = setInterval(() => {
+      emit('matchmaking:status', { gameType: selectedGame });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [matchStatus, selectedGame, emit]);
+
   // Listen for lobby events
   useEffect(() => {
     const offCreated = on('lobby:created', ({ code }: { code: string }) => {
       setPrivateCode(code);
     });
     const offError = on('error', ({ message }: { message: string }) => {
-      alert(message);
+      toast(message, 'error');
     });
-    return () => { offCreated(); offError(); };
-  }, [on]);
+    const offQueueStatus = on('matchmaking:status', ({ playersInQueue }: any) => {
+      setQueueSize(playersInQueue);
+    });
+    const offOpDisc = on('opponent:disconnected', () => {
+      setOpponentDisconnected(true);
+      toast('Opponent disconnected — waiting for reconnect...', 'warning');
+      setTimeout(() => setOpponentDisconnected(false), 10000);
+    });
+    const offRematchReq = on('game:rematch_requested', ({ from }: { from: string }) => {
+      toast(`${from} wants a rematch!`, 'info');
+    });
+    return () => { offCreated(); offError(); offQueueStatus(); offOpDisc(); offRematchReq(); };
+  }, [on, toast]);
 
   const handleQuickMatch = () => {
     if (!user) { router.push('/login'); return; }
@@ -99,9 +136,22 @@ function PlayContent() {
 
   // Show multiplayer active game (keep mounted during 'ended' so modal can show)
   if ((matchStatus === 'playing' || matchStatus === 'ended') && GameComponent) {
+    const formatDur = (s: number) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
+        {/* Match duration pill */}
+        {matchStatus === 'playing' && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-30 bg-surface border border-border rounded-full px-3 py-1 flex items-center gap-1.5 text-xs text-text-muted shadow">
+            <Clock size={11} />
+            {formatDur(matchDuration)}
+          </div>
+        )}
+        {opponentDisconnected && (
+          <div className="fixed top-20 left-0 right-0 z-30 text-center text-xs bg-warning/10 border-b border-warning/30 text-warning py-1.5 font-medium">
+            ⚠ Opponent disconnected — waiting for reconnect...
+          </div>
+        )}
         <div className="pt-16">
           <GameComponent match={match} emit={emit} on={on} solo={false} />
         </div>
@@ -250,7 +300,13 @@ function PlayContent() {
                     </div>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Finding opponent...</h3>
-                  <p className="text-text-muted text-sm mb-6">Matching by ELO rating</p>
+                  <p className="text-text-muted text-sm mb-1">Matching by ELO rating</p>
+                  {queueSize > 0 && (
+                    <p className="text-text-faint text-xs mb-4 flex items-center justify-center gap-1">
+                      <Users size={11} /> {queueSize} player{queueSize !== 1 ? 's' : ''} in queue
+                    </p>
+                  )}
+                  <div className="mb-6" />
                   <Button variant="danger" onClick={handleLeaveQueue} icon={<X size={15} />}>
                     Cancel Search
                   </Button>

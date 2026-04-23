@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Trophy, User, LogOut, Menu, X, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '@/app/store/authStore';
 import { useGameStore } from '@/app/store/gameStore';
-import { getRankTier } from '@/app/lib/ranks';
+import { getRankTier, GAME_CONFIG } from '@/app/lib/ranks';
 import { disconnectSocket } from '@/app/lib/socket';
 
 const NAV_LINKS = [
@@ -19,7 +19,7 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, clearUser } = useAuthStore();
-  const { connected } = useGameStore();
+  const { connected, matchStatus, currentGame } = useGameStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -65,11 +65,23 @@ export default function Navbar() {
 
         {/* Right side */}
         <div className="flex items-center gap-3">
+          {/* In-match indicator */}
+          {matchStatus === 'playing' && currentGame && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-success/10 border border-success/30">
+              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              <span className="text-xs text-success font-medium">
+                {GAME_CONFIG[currentGame]?.icon} In Match
+              </span>
+            </div>
+          )}
+
           {/* Connection indicator */}
-          <div className="hidden sm:flex items-center gap-1.5">
-            <div className={`w-2 h-2 rounded-full ${connected ? 'bg-success animate-pulse' : 'bg-danger'}`} />
-            <span className="text-xs text-text-faint">{connected ? 'Online' : 'Offline'}</span>
-          </div>
+          {matchStatus !== 'playing' && (
+            <div className="hidden sm:flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-success animate-pulse' : 'bg-danger'}`} />
+              <span className="text-xs text-text-faint">{connected ? 'Online' : 'Offline'}</span>
+            </div>
+          )}
 
           {user ? (
             <div className="relative">
