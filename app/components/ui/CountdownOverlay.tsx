@@ -31,8 +31,13 @@ export default function CountdownOverlay({ count, visible, players }: CountdownO
                 </div>
                 <div className="text-text-faint text-2xl font-bold">VS</div>
                 <div className="text-center">
-                  <div className="text-xl font-bold text-text">{players[1]?.username}</div>
-                  <div className="text-text-muted text-sm">{players[1]?.elo} ELO</div>
+                  <div className="text-xl font-bold text-text flex items-center gap-1">
+                    {(players[1] as any)?.isBot && <span className="text-sm">🤖</span>}
+                    {players[1]?.username}
+                  </div>
+                  <div className="text-text-muted text-sm">
+                    {(players[1] as any)?.isBot ? '🤖 Bot' : `${players[1]?.elo} ELO`}
+                  </div>
                 </div>
               </motion.div>
             )}

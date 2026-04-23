@@ -46,8 +46,12 @@ model UserStats {
   colorMatchWins  Int     @default(0)
   soundRecogWins  Int     @default(0)
   aimTrainerWins  Int     @default(0)
-  memoryTilesWins Int     @default(0)
-  checkersWins    Int     @default(0)
+  memoryTilesWins    Int     @default(0)
+  checkersWins       Int     @default(0)
+
+  // Streak tracking
+  currentWinStreak   Int     @default(0)
+  bestWinStreak      Int     @default(0)
 
   updatedAt       DateTime @updatedAt
 }

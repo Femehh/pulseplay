@@ -44,8 +44,9 @@ export const api = {
     matches: (username: string) => apiFetch<any[]>(`/api/users/${username}/matches`),
   },
   leaderboard: {
-    global: (limit = 50) => apiFetch<any[]>(`/api/leaderboard?limit=${limit}`),
-    byGame: (gameType: string, limit = 50) =>
-      apiFetch<any[]>(`/api/leaderboard?gameType=${gameType}&limit=${limit}`),
+    global: (limit = 25, offset = 0, search = '') =>
+      apiFetch<any>(`/api/leaderboard?limit=${limit}&offset=${offset}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+    byGame: (gameType: string, limit = 25, offset = 0, search = '') =>
+      apiFetch<any>(`/api/leaderboard?gameType=${gameType}&limit=${limit}&offset=${offset}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
   },
 };

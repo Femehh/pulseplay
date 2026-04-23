@@ -5,65 +5,89 @@ const { getRankTier } = require('../utils/elo');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /api/leaderboard?gameType=REACTION_TIME&limit=50&offset=0
+// GET /api/leaderboard?gameType=X&limit=50&offset=0&search=username
 router.get('/', async (req, res) => {
   try {
-    const { gameType, limit = 50, offset = 0 } = req.query;
+    const { gameType, limit = 50, offset = 0, search } = req.query;
+    const take = Math.min(Number(limit), 100);
+    const skip = Number(offset);
 
     if (gameType) {
       // Game-specific leaderboard
-      const rankings = await prisma.ranking.findMany({
-        where: { gameType },
-        orderBy: { elo: 'desc' },
-        take: Number(limit),
-        skip: Number(offset),
-        include: {
-          user: {
-            select: { id: true, username: true, avatarUrl: true },
-          },
-        },
-      });
+      const where = {
+        gameType,
+        ...(search ? { user: { username: { contains: search, mode: 'insensitive' } } } : {}),
+      };
 
-      return res.json(
-        rankings.map((r, i) => ({
-          rank: Number(offset) + i + 1,
+      const [rankings, total] = await Promise.all([
+        prisma.ranking.findMany({
+          where,
+          orderBy: { elo: 'desc' },
+          take,
+          skip,
+          include: {
+            user: {
+              select: { id: true, username: true, avatarUrl: true },
+            },
+          },
+        }),
+        prisma.ranking.count({ where }),
+      ]);
+
+      return res.json({
+        entries: rankings.map((r, i) => ({
+          rank: skip + i + 1,
           userId: r.userId,
           username: r.user.username,
           avatarUrl: r.user.avatarUrl,
           elo: r.elo,
           tier: getRankTier(r.elo),
-        }))
-      );
+        })),
+        total,
+        offset: skip,
+        limit: take,
+      });
     }
 
-    // Global leaderboard (overall ELO from stats)
-    const stats = await prisma.userStats.findMany({
-      orderBy: { elo: 'desc' },
-      take: Number(limit),
-      skip: Number(offset),
-      include: {
-        user: {
-          select: { id: true, username: true, avatarUrl: true, isGuest: true },
-        },
-      },
-    });
+    // Global leaderboard
+    const where = search
+      ? { user: { username: { contains: search, mode: 'insensitive' }, isGuest: false } }
+      : { user: { isGuest: false } };
 
-    res.json(
-      stats
-        .filter((s) => !s.user.isGuest)
-        .map((s, i) => ({
-          rank: Number(offset) + i + 1,
-          userId: s.userId,
-          username: s.user.username,
-          avatarUrl: s.user.avatarUrl,
-          elo: s.elo,
-          wins: s.wins,
-          losses: s.losses,
-          totalMatches: s.totalMatches,
-          winRate: s.totalMatches > 0 ? Math.round((s.wins / s.totalMatches) * 100) : 0,
-          tier: getRankTier(s.elo),
-        }))
-    );
+    const [stats, total] = await Promise.all([
+      prisma.userStats.findMany({
+        where,
+        orderBy: { elo: 'desc' },
+        take,
+        skip,
+        include: {
+          user: {
+            select: { id: true, username: true, avatarUrl: true, isGuest: true },
+          },
+        },
+      }),
+      prisma.userStats.count({ where }),
+    ]);
+
+    res.json({
+      entries: stats.map((s, i) => ({
+        rank: skip + i + 1,
+        userId: s.userId,
+        username: s.user.username,
+        avatarUrl: s.user.avatarUrl,
+        elo: s.elo,
+        wins: s.wins,
+        losses: s.losses,
+        totalMatches: s.totalMatches,
+        winRate: s.totalMatches > 0 ? Math.round((s.wins / s.totalMatches) * 100) : 0,
+        currentWinStreak: s.currentWinStreak || 0,
+        bestWinStreak: s.bestWinStreak || 0,
+        tier: getRankTier(s.elo),
+      })),
+      total,
+      offset: skip,
+      limit: take,
+    });
   } catch (err) {
     console.error('[LEADERBOARD]', err);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });

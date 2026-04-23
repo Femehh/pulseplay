@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Trophy, Target, Zap, BarChart3, Clock } from 'lucide-react';
+import { Trophy, Target, Zap, BarChart3, Clock, Flame, TrendingUp } from 'lucide-react';
 import Navbar from '@/app/components/layout/Navbar';
 import { api } from '@/app/lib/api';
 import { GAME_CONFIG } from '@/app/lib/ranks';
@@ -22,6 +22,14 @@ interface UserProfile {
     totalMatches: number;
     winRate: number;
     avgReactionTime?: number;
+    currentWinStreak: number;
+    bestWinStreak: number;
+    reactionWins: number;
+    colorMatchWins: number;
+    soundRecogWins: number;
+    aimTrainerWins: number;
+    memoryTilesWins: number;
+    checkersWins: number;
     tier: { name: string; color: string; icon: string };
   };
   rankings: Array<{ gameType: string; elo: number; tier: { name: string; color: string; icon: string } }>;
@@ -39,6 +47,21 @@ interface MatchHistory {
   duration: number;
 }
 
+function formatDuration(s: number | null) {
+  if (!s) return '—';
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+const GAME_WIN_KEYS: Record<string, keyof UserProfile['stats']> = {
+  REACTION_TIME: 'reactionWins',
+  COLOR_MATCH: 'colorMatchWins',
+  SOUND_RECOGNITION: 'soundRecogWins',
+  AIM_TRAINER: 'aimTrainerWins',
+  MEMORY_TILES: 'memoryTilesWins',
+  CHECKERS: 'checkersWins',
+};
+
 export default function ProfilePage() {
   const { username } = useParams<{ username: string }>();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -47,14 +70,8 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      api.users.get(username),
-      api.users.matches(username),
-    ])
-      .then(([p, m]) => {
-        setProfile(p);
-        setMatches(m);
-      })
+    Promise.all([api.users.get(username), api.users.matches(username)])
+      .then(([p, m]) => { setProfile(p); setMatches(m); })
       .catch(() => setError('Player not found'))
       .finally(() => setLoading(false));
   }, [username]);
@@ -92,7 +109,6 @@ export default function ProfilePage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          {/* Avatar */}
           <div
             className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-black flex-shrink-0"
             style={{ backgroundColor: `${stats.tier.color}20`, color: stats.tier.color }}
@@ -103,12 +119,14 @@ export default function ProfilePage() {
           <div className="flex-1">
             <div className="flex flex-wrap items-center gap-3 mb-2">
               <h1 className="text-2xl font-black text-text">{profile.username}</h1>
-              <span
-                className="badge text-sm"
-                style={{ backgroundColor: `${stats.tier.color}20`, color: stats.tier.color }}
-              >
+              <span className="badge text-sm" style={{ backgroundColor: `${stats.tier.color}20`, color: stats.tier.color }}>
                 {stats.tier.icon} {stats.tier.name}
               </span>
+              {stats.currentWinStreak >= 3 && (
+                <span className="badge text-xs bg-warning/10 text-warning border-warning/30 flex items-center gap-1">
+                  <Flame size={11} /> {stats.currentWinStreak} win streak
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
@@ -122,9 +140,7 @@ export default function ProfilePage() {
               </div>
               <div className="stat-box">
                 <div className="text-text-faint text-xs">Win Rate</div>
-                <div className={`text-xl font-bold ${stats.winRate >= 50 ? 'text-success' : 'text-danger'}`}>
-                  {stats.winRate}%
-                </div>
+                <div className={`text-xl font-bold ${stats.winRate >= 50 ? 'text-success' : 'text-danger'}`}>{stats.winRate}%</div>
               </div>
               <div className="stat-box">
                 <div className="text-text-faint text-xs">Matches</div>
@@ -135,18 +151,13 @@ export default function ProfilePage() {
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          {/* Win/Loss */}
-          <motion.div
-            className="card p-5"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
+          {/* Win/Loss + streaks */}
+          <motion.div className="card p-5" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <div className="flex items-center gap-2 mb-4 text-text-muted">
               <Trophy size={16} />
               <span className="text-sm font-medium">Record</span>
             </div>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 mb-4">
               <div>
                 <div className="text-3xl font-black text-success">{stats.wins}</div>
                 <div className="text-xs text-text-faint">Wins</div>
@@ -157,34 +168,39 @@ export default function ProfilePage() {
                 <div className="text-xs text-text-faint">Losses</div>
               </div>
             </div>
+            {stats.bestWinStreak > 0 && (
+              <div className="flex items-center gap-2 text-xs text-text-muted border-t border-border pt-3">
+                <Flame size={12} className="text-warning" />
+                <span>Best streak: <span className="text-warning font-bold">{stats.bestWinStreak}</span></span>
+                {stats.currentWinStreak > 0 && (
+                  <span className="ml-auto text-success">Active: {stats.currentWinStreak}</span>
+                )}
+              </div>
+            )}
           </motion.div>
 
-          {/* Reaction time */}
-          {stats.avgReactionTime && (
-            <motion.div
-              className="card p-5"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-            >
-              <div className="flex items-center gap-2 mb-4 text-text-muted">
-                <Zap size={16} />
-                <span className="text-sm font-medium">Avg Reaction</span>
+          {/* Reaction time or peak ELO */}
+          <motion.div className="card p-5" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+            <div className="flex items-center gap-2 mb-4 text-text-muted">
+              <TrendingUp size={16} />
+              <span className="text-sm font-medium">Peak Performance</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-text-faint">Peak ELO</span>
+                <span className="font-black text-text">{stats.peakElo.toLocaleString()}</span>
               </div>
-              <div className="text-3xl font-black text-accent">
-                {Math.round(stats.avgReactionTime)}
-                <span className="text-base font-medium text-text-faint ml-1">ms</span>
-              </div>
-            </motion.div>
-          )}
+              {stats.avgReactionTime && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-text-faint">Avg Reaction</span>
+                  <span className="font-bold text-accent">{Math.round(stats.avgReactionTime)}ms</span>
+                </div>
+              )}
+            </div>
+          </motion.div>
 
           {/* Member since */}
-          <motion.div
-            className="card p-5"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
+          <motion.div className="card p-5" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <div className="flex items-center gap-2 mb-4 text-text-muted">
               <Clock size={16} />
               <span className="text-sm font-medium">Member Since</span>
@@ -192,17 +208,13 @@ export default function ProfilePage() {
             <div className="text-lg font-bold text-text">
               {new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </div>
+            <div className="text-xs text-text-faint mt-1">{stats.totalMatches} total matches played</div>
           </motion.div>
         </div>
 
         {/* Per-game rankings */}
         {profile.rankings.length > 0 && (
-          <motion.div
-            className="card p-5 mb-6"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
+          <motion.div className="card p-5 mb-6" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
             <div className="flex items-center gap-2 mb-4 text-text-muted">
               <BarChart3 size={16} />
               <span className="text-sm font-medium">Per-Game Rankings</span>
@@ -210,12 +222,15 @@ export default function ProfilePage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {profile.rankings.map((r) => {
                 const game = GAME_CONFIG[r.gameType as keyof typeof GAME_CONFIG];
+                const winKey = GAME_WIN_KEYS[r.gameType];
+                const wins = winKey ? (stats[winKey] as number) : 0;
                 return (
                   <div key={r.gameType} className="stat-box text-center">
                     <div className="text-2xl mb-1">{game?.icon}</div>
                     <div className="text-xs text-text-faint mb-1">{game?.name}</div>
                     <div className="font-black text-text">{r.elo}</div>
                     <span className="text-xs" style={{ color: r.tier.color }}>{r.tier.icon} {r.tier.name}</span>
+                    {wins > 0 && <div className="text-xs text-text-faint mt-0.5">{wins}W</div>}
                   </div>
                 );
               })}
@@ -224,12 +239,7 @@ export default function ProfilePage() {
         )}
 
         {/* Match history */}
-        <motion.div
-          className="card overflow-hidden"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
+        <motion.div className="card overflow-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
           <div className="px-5 py-4 border-b border-border flex items-center gap-2">
             <Target size={16} className="text-text-muted" />
             <h2 className="font-semibold text-text">Recent Matches</h2>
@@ -250,21 +260,24 @@ export default function ProfilePage() {
                     transition={{ delay: i * 0.03 }}
                   >
                     <span className="text-xl">{game?.icon}</span>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-text">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-text truncate">
                         vs <span className="text-primary">{m.opponent || 'Unknown'}</span>
                       </div>
-                      <div className="text-xs text-text-faint">{game?.name}</div>
+                      <div className="text-xs text-text-faint flex items-center gap-2">
+                        <span>{game?.name}</span>
+                        {m.duration && <span>· {formatDuration(m.duration)}</span>}
+                      </div>
                     </div>
                     <div className="text-center">
                       <div className="text-sm font-bold text-text">{m.myScore} – {m.opponentScore}</div>
                     </div>
-                    <div className="text-right min-w-[60px]">
+                    <div className="text-right min-w-[70px]">
                       <span className={`badge text-xs ${m.won ? 'badge-success' : 'badge-danger'}`}>
                         {m.won ? 'WIN' : 'LOSS'}
                       </span>
-                      {m.eloChange !== null && (
-                        <div className={`text-xs mt-0.5 ${m.eloChange >= 0 ? 'text-success' : 'text-danger'}`}>
+                      {m.eloChange != null && (
+                        <div className={`text-xs mt-0.5 flex items-center justify-end gap-0.5 ${m.eloChange >= 0 ? 'text-success' : 'text-danger'}`}>
                           {m.eloChange >= 0 ? '+' : ''}{m.eloChange}
                         </div>
                       )}

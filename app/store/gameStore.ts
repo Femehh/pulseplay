@@ -20,6 +20,8 @@ export interface MatchResult {
   winner: { username: string; id: string } | null;
   scores: { username: string; score: number }[];
   eloChanges: Record<string, number>;
+  streakBonus?: number;
+  rankChanges?: Record<string, { from: string; to: string }>;
 }
 
 interface GameState {

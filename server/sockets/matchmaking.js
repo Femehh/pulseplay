@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { createMatch } = require('../games/matchFactory');
+const { scheduleBotIfNeeded } = require('../bots/botPlayer');
 
 /**
  * Matchmaking socket handler.
@@ -40,6 +41,9 @@ module.exports = function matchmakingHandler(io, socket, state, prisma) {
 
     // Try to find a match
     tryMatchPlayers(io, state, gameType, prisma);
+
+    // Schedule bot fallback if no match found in 15s
+    scheduleBotIfNeeded(io, state, gameType, queueEntry, prisma);
   });
 
   // Leave matchmaking queue

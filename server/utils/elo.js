@@ -1,6 +1,7 @@
 /**
  * ELO rating system for PulsePlay.
  * K-factor adjusts based on current rating and matches played.
+ * Includes streak bonus for consecutive wins.
  */
 
 const BASE_K = 32;
@@ -14,23 +15,21 @@ function getKFactor(elo, matchesPlayed = 0) {
 
 /**
  * Calculate ELO change after a match.
- * @param {number} winnerElo
- * @param {number} loserElo
- * @param {number} winnerMatches
- * @param {number} loserMatches
- * @returns {{ winnerChange: number, loserChange: number }}
+ * Streak bonus: +2 ELO per consecutive win (max +10).
  */
-function calculateEloChange(winnerElo, loserElo, winnerMatches = 0, loserMatches = 0) {
+function calculateEloChange(winnerElo, loserElo, winnerMatches = 0, loserMatches = 0, winnerStreak = 0) {
   const expectedWin = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
   const expectedLose = 1 - expectedWin;
 
   const kWinner = getKFactor(winnerElo, winnerMatches);
   const kLoser = getKFactor(loserElo, loserMatches);
 
-  const winnerChange = Math.round(kWinner * (1 - expectedWin));
+  const streakBonus = Math.min(winnerStreak * 2, 10); // +2 per win streak, max +10
+
+  const winnerChange = Math.round(kWinner * (1 - expectedWin)) + streakBonus;
   const loserChange = Math.round(kLoser * (0 - expectedLose));
 
-  return { winnerChange, loserChange };
+  return { winnerChange, loserChange, streakBonus };
 }
 
 /**
@@ -46,4 +45,11 @@ function getRankTier(elo) {
   return { name: 'Bronze', color: '#cd7f32', icon: '🥉' };
 }
 
-module.exports = { calculateEloChange, getRankTier };
+/**
+ * Get rank tier name from ELO for rank-up/down detection.
+ */
+function getRankName(elo) {
+  return getRankTier(elo).name;
+}
+
+module.exports = { calculateEloChange, getRankTier, getRankName };

@@ -1,4 +1,4 @@
-const { calculateEloChange } = require('../utils/elo');
+const { calculateEloChange, getRankName } = require('../utils/elo');
 
 /**
  * Handles all in-game socket events.
@@ -20,9 +20,13 @@ module.exports = function gameHandler(io, socket, state, prisma) {
     const isParticipant = match.players.some((p) => p.playerId === player.id);
     if (!isParticipant) return;
 
-    // Update socketId for this player
     const p = match.players.find((p) => p.playerId === player.id);
     if (p) {
+      // Cancel any pending forfeit timer
+      if (match._disconnectTimer) {
+        clearTimeout(match._disconnectTimer);
+        match._disconnectTimer = null;
+      }
       state.playerToMatch.delete(p.socketId);
       p.socketId = socket.id;
       state.playerToMatch.set(socket.id, matchId);
@@ -30,19 +34,16 @@ module.exports = function gameHandler(io, socket, state, prisma) {
 
     socket.join(match.roomId);
 
-    // Notify opponent they're back
     const opponentSocketId = match.players.find((p) => p.socketId !== socket.id)?.socketId;
     if (opponentSocketId) {
       io.to(opponentSocketId).emit('opponent:reconnected', { username: player.username });
     }
 
-    // Resend current game state
     try {
       const gameModule = require(`../games/${match.gameType.toLowerCase()}`);
       if (gameModule.onRejoin) {
         gameModule.onRejoin(io, socket, match, state);
       } else if (match.privateState?.board) {
-        // Generic: resend board state for board games
         socket.emit('game:state', {
           type: match.gameType.toLowerCase(),
           board: match.privateState.board.map ? match.privateState.board.map(r => [...r]) : match.privateState.board,
@@ -77,7 +78,7 @@ module.exports = function gameHandler(io, socket, state, prisma) {
       return;
     }
 
-    // Handle draw offer (for checkers and any board game)
+    // Handle draw offer
     if (data.type === 'draw_offer') {
       const opponent = match.players.find((p) => p.socketId !== socket.id);
       if (opponent) io.to(opponent.socketId).emit('game:draw_offer', { from: player.username });
@@ -87,7 +88,7 @@ module.exports = function gameHandler(io, socket, state, prisma) {
     // Handle draw response
     if (data.type === 'draw_response') {
       if (data.accept) {
-        endMatch(io, state, match, null, prisma); // null = draw
+        endMatch(io, state, match, null, prisma);
       } else {
         const opponent = match.players.find((p) => p.socketId !== socket.id);
         if (opponent) io.to(opponent.socketId).emit('game:draw_declined', { from: player.username });
@@ -153,7 +154,7 @@ module.exports = function gameHandler(io, socket, state, prisma) {
 };
 
 /**
- * End a match and update ELO. Called by game modules.
+ * End a match, update ELO + streaks + per-game rankings + peak ELO.
  */
 async function endMatch(io, state, match, winnerId, prisma) {
   if (match.status === 'ended') return;
@@ -172,24 +173,81 @@ async function endMatch(io, state, match, winnerId, prisma) {
     winner: winner ? { username: winner.username, id: winner.playerId } : null,
     scores: match.players.map((p) => ({ username: p.username, score: p.score })),
     eloChanges: {},
+    streakBonus: 0,
+    rankChanges: {},
   };
 
-  if (winner && loser && !winner.playerId?.startsWith('guest_') && !loser.playerId?.startsWith('guest_')) {
-    const { winnerChange, loserChange } = calculateEloChange(winner.elo, loser.elo);
+  const isGuest = (p) => !p || p.playerId?.startsWith('guest_');
+
+  if (winner && loser && !isGuest(winner) && !isGuest(loser)) {
+    // Fetch current stats including streaks
+    let winnerStats, loserStats;
+    try {
+      [winnerStats, loserStats] = await Promise.all([
+        prisma.userStats.findUnique({ where: { userId: winner.playerId } }),
+        prisma.userStats.findUnique({ where: { userId: loser.playerId } }),
+      ]);
+    } catch { winnerStats = null; loserStats = null; }
+
+    const winnerStreak = (winnerStats?.currentWinStreak || 0);
+    const { winnerChange, loserChange, streakBonus } = calculateEloChange(
+      winner.elo, loser.elo,
+      winnerStats?.totalMatches || 0,
+      loserStats?.totalMatches || 0,
+      winnerStreak
+    );
+
     result.eloChanges[winner.username] = winnerChange;
     result.eloChanges[loser.username] = loserChange;
+    result.streakBonus = streakBonus;
+
+    // Detect rank changes
+    const winnerNewElo = (winnerStats?.elo || winner.elo) + winnerChange;
+    const loserNewElo = (loserStats?.elo || loser.elo) + loserChange;
+    const winnerOldRank = getRankName(winnerStats?.elo || winner.elo);
+    const loserOldRank = getRankName(loserStats?.elo || loser.elo);
+    const winnerNewRank = getRankName(winnerNewElo);
+    const loserNewRank = getRankName(Math.max(0, loserNewElo));
+
+    if (winnerOldRank !== winnerNewRank) result.rankChanges[winner.username] = { from: winnerOldRank, to: winnerNewRank };
+    if (loserOldRank !== loserNewRank) result.rankChanges[loser.username] = { from: loserOldRank, to: loserNewRank };
+
+    const gameType = match.gameType;
 
     if (prisma) {
       try {
         await Promise.all([
+          // Winner stats
           prisma.userStats.update({
             where: { userId: winner.playerId },
-            data: { wins: { increment: 1 }, totalMatches: { increment: 1 }, elo: { increment: winnerChange } },
+            data: {
+              wins: { increment: 1 },
+              totalMatches: { increment: 1 },
+              elo: { increment: winnerChange },
+              peakElo: { set: Math.max(winnerNewElo, winnerStats?.peakElo || 0) },
+              currentWinStreak: { increment: 1 },
+              bestWinStreak: {
+                set: Math.max((winnerStreak + 1), winnerStats?.bestWinStreak || 0),
+              },
+              ...(gameType === 'REACTION_TIME' && { reactionWins: { increment: 1 } }),
+              ...(gameType === 'COLOR_MATCH' && { colorMatchWins: { increment: 1 } }),
+              ...(gameType === 'SOUND_RECOGNITION' && { soundRecogWins: { increment: 1 } }),
+              ...(gameType === 'AIM_TRAINER' && { aimTrainerWins: { increment: 1 } }),
+              ...(gameType === 'MEMORY_TILES' && { memoryTilesWins: { increment: 1 } }),
+              ...(gameType === 'CHECKERS' && { checkersWins: { increment: 1 } }),
+            },
           }),
+          // Loser stats
           prisma.userStats.update({
             where: { userId: loser.playerId },
-            data: { losses: { increment: 1 }, totalMatches: { increment: 1 }, elo: { increment: loserChange } },
+            data: {
+              losses: { increment: 1 },
+              totalMatches: { increment: 1 },
+              elo: { increment: loserChange },
+              currentWinStreak: { set: 0 },
+            },
           }),
+          // Match record
           prisma.match.update({
             where: { id: match.id },
             data: {
@@ -202,6 +260,18 @@ async function endMatch(io, state, match, winnerId, prisma) {
               endedAt: new Date(),
               duration: Math.floor((match.endedAt - match.startedAt) / 1000),
             },
+          }),
+          // Per-game ranking upsert for winner
+          prisma.ranking.upsert({
+            where: { userId_gameType: { userId: winner.playerId, gameType } },
+            update: { elo: { increment: winnerChange } },
+            create: { userId: winner.playerId, gameType, elo: 1000 + winnerChange },
+          }),
+          // Per-game ranking upsert for loser
+          prisma.ranking.upsert({
+            where: { userId_gameType: { userId: loser.playerId, gameType } },
+            update: { elo: { increment: loserChange } },
+            create: { userId: loser.playerId, gameType, elo: Math.max(600, 1000 + loserChange) },
           }),
         ]);
       } catch (err) {
