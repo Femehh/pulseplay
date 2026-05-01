@@ -44,12 +44,12 @@ function PlayContent() {
   const matchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
-  // Handle match found → navigate
+  // Handle match found → use game type from the server match, not local selectedGame
   useEffect(() => {
-    if (matchStatus === 'found' || matchStatus === 'countdown' || matchStatus === 'playing') {
-      setCurrentGame(selectedGame);
+    if ((matchStatus === 'found' || matchStatus === 'countdown' || matchStatus === 'playing') && match?.gameType) {
+      setCurrentGame(match.gameType);
     }
-  }, [matchStatus]);
+  }, [matchStatus, match]);
 
   // Match duration timer
   useEffect(() => {

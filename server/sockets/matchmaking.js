@@ -198,3 +198,5 @@ function startCountdown(io, state, matchId, seconds, prisma) {
     }
   }, 1000);
 }
+
+module.exports.startMatchFromLobby = startMatch;
